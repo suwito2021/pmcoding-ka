@@ -3,6 +3,23 @@
 // URL Google Apps Script untuk backend
 const scriptURL = 'https://script.google.com/macros/s/AKfycbyRUWGf8gNFHH0YRklWOzWsTOGBTcsGGl-o2owekbd0ek3CZLPS-CBlmGrfTdm4WWs2/exec';
 
+// ============= FUNGSI BANTU BARU UNTUK LOGGING =============
+/**
+ * Mengirim log aktivitas pengguna ke Google Apps Script.
+ * Fungsi ini menjadi pusat untuk semua pencatatan aktivitas.
+ * @param {string} activityType - Jenis aktivitas yang akan dicatat (misal: 'MULAI_TES_PM').
+ */
+function logUserActivity(activityType) {
+    const userEmail = sessionStorage.getItem('loggedInUser');
+    if (activityType && userEmail) {
+        // Kirim data ke backend tanpa menunggu respons
+        fetch(`${scriptURL}?action=logActivity&email=${encodeURIComponent(userEmail)}&type=${encodeURIComponent(activityType)}`);
+        // Muat ulang data grafik setelah beberapa saat agar data baru bisa muncul
+        setTimeout(loadActivityChartData, 1500); 
+    }
+}
+// ==============================================================
+
 // --- Elemen UI Global ---
 const publicContent = document.getElementById('publicContent');
 const memberArea = document.getElementById('memberArea');
@@ -126,7 +143,6 @@ const contentPanels = document.querySelectorAll('.content-panel');
 const sidebarLinks = document.querySelectorAll('.sidebar-link');
 
 if (sidebarMenu) {
-    if (sidebarMenu) {
     sidebarMenu.addEventListener('click', (e) => {
         const link = e.target.closest('.sidebar-link');
         if (!link) return;
@@ -134,6 +150,13 @@ if (sidebarMenu) {
 
         const targetId = link.dataset.target;
         if (!targetId) return;
+
+        // ============= MODIFIKASI: LOGGING UNTUK ANGKET =============
+        // Catat aktivitas jika targetnya adalah angket
+        if (targetId === 'angket') {
+            logUserActivity('BUKA_ANGKET');
+        }
+        // ==========================================================
 
         // 1. Atur highlight pada menu
         sidebarLinks.forEach(s_link => {
@@ -156,8 +179,7 @@ if (sidebarMenu) {
         if (window.innerWidth < 768) {
             toggleSidebar();
         }
-     });
-    }
+    });
 }
 
 
@@ -248,11 +270,9 @@ if(downloadButtons) {
         const button = e.target.closest('.activity-btn');
         if (!button) return;
         const activityType = button.dataset.activity;
-        const userEmail = sessionStorage.getItem('loggedInUser');
-        if (activityType && userEmail) {
-            fetch(`${scriptURL}?action=logActivity&email=${encodeURIComponent(userEmail)}&type=${encodeURIComponent(activityType)}`);
-            setTimeout(loadActivityChartData, 1000);
-        }
+        // ============= MODIFIKASI: Menggunakan fungsi logging terpusat =============
+        logUserActivity(activityType);
+        // =======================================================================
     });
 }
 
@@ -322,6 +342,22 @@ function loadActivityChartData() {
 
 function drawActivityChart(stats, ctx) {
     if (activityChart) activityChart.destroy();
+    // Menambahkan lebih banyak warna untuk mengakomodasi lebih banyak jenis aktivitas
+    const backgroundColors = [
+        'rgba(79, 70, 229, 0.6)',   // Indigo for Login
+        'rgba(5, 150, 105, 0.6)',   // Teal for Unduh
+        'rgba(217, 70, 239, 0.6)',  // Fuchsia for Buka Angket
+        'rgba(245, 158, 11, 0.6)',  // Amber for Mulai Tes
+        'rgba(220, 38, 38, 0.6)'    // Red for Selesai Tes
+    ];
+    const borderColors = [
+        'rgba(79, 70, 229, 1)',
+        'rgba(5, 150, 105, 1)',
+        'rgba(217, 70, 239, 1)',
+        'rgba(245, 158, 11, 1)',
+        'rgba(220, 38, 38, 1)'
+    ];
+
     activityChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -329,8 +365,8 @@ function drawActivityChart(stats, ctx) {
             datasets: [{
                 label: 'Jumlah Aktivitas',
                 data: stats.data,
-                backgroundColor: ['rgba(79, 70, 229, 0.6)', 'rgba(5, 150, 105, 0.6)'],
-                borderColor: ['rgba(79, 70, 229, 1)', 'rgba(5, 150, 105, 1)'],
+                backgroundColor: backgroundColors.slice(0, stats.labels.length),
+                borderColor: borderColors.slice(0, stats.labels.length),
                 borderWidth: 1
             }]
         },
@@ -365,20 +401,28 @@ function quizApp() {
             { question: "Seorang guru TK mencoba metode bercerita baru dan merasa gagal karena anak-anak kurang fokus. Menurut prinsip PM, respons terbaik guru tersebut adalah...", options: [ { text: "Menyalahkan anak-anak karena tidak bisa diatur.", correct: false }, { text: "Melihatnya sebagai pengalaman belajar, merefleksikan apa yang kurang, dan mencoba adaptasi baru (misal: menggunakan boneka tangan).", correct: true }, { text: "Tidak akan pernah menggunakan metode bercerita lagi.", correct: false }, { text: "Melaporkan kepada kepala sekolah bahwa metode tersebut tidak efektif.", correct: false } ], feedback: "Tepat! PM mendorong pola pikir bertumbuh (growth mindset), di mana setiap tantangan dilihat sebagai <strong>kesempatan untuk belajar, merefleksi, dan beradaptasi</strong>." }
         ],
 
-        startQuiz() { this.quizStarted = true; },
+        // ============= MODIFIKASI: LOGGING UNTUK KUIS =============
+        startQuiz() { 
+            logUserActivity('MULAI_TES_PM'); // Mencatat saat kuis dimulai
+            this.quizStarted = true; 
+        },
+        // ========================================================
         selectAnswer(index) {
             this.questions[this.currentQuestionIndex].selectedAnswer = index;
             if (this.questions[this.currentQuestionIndex].options[index].correct) { this.score++; }
             this.answerSelected = true;
         },
+        // ============= MODIFIKASI: LOGGING UNTUK KUIS =============
         nextQuestion() {
             if (this.currentQuestionIndex < this.questions.length - 1) {
                 this.currentQuestionIndex++;
                 this.answerSelected = false;
             } else {
+                logUserActivity('SELESAI_TES_PM'); // Mencatat saat kuis selesai
                 this.quizFinished = true;
             }
         },
+        // ========================================================
         getFeedbackMessage() {
             const percentage = (this.score / this.questions.length) * 100;
             if (percentage >= 80) return "Luar biasa! Pemahaman Anda tentang Pembelajaran Mendalam sangat baik.";
